@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Query Tracker — Kalpesh Mahajan</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; background: #F1F5F9; color: #0F172A; min-height: 100vh; }
+    input, select, button { font-family: inherit; }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+/**
+ * Student Query Tracker
+ * Author: Kalpesh Mahajan
+ * GitHub: https://github.com/Kalpesh8777
+ * Tech: React.js (hooks), CSS-in-JS via inline styles
+ * Delivery: Option B — single HTML file with Babel in-browser
+ */
+
+const { useState, useEffect } = React;
+
+const COLORS = {
+  primary: '#2563EB',
+  primaryDark: '#1D4ED8',
+  background: '#F1F5F9',
+  surface: '#FFFFFF',
+  border: '#E2E8F0',
+  text: '#0F172A',
+  muted: '#64748B',
+  statusOpen: { bg: '#EFF6FF', text: '#1D4ED8' },
+  statusInProgress: { bg: '#FFFBEB', text: '#B45309' },
+  statusResolved: { bg: '#F0FDF4', text: '#15803D' },
+  priorityHigh: { bg: '#FEF2F2', text: '#DC2626' },
+  priorityMedium: { bg: '#FFF7ED', text: '#EA580C' },
+  priorityLow: { bg: '#F0FDF4', text: '#16A34A' },
+  categoryAcademic: { bg: '#EDE9FE', text: '#7C3AED' },
+  categoryAdmin: { bg: '#E0F2FE', text: '#0369A1' },
+  categoryTechnical: { bg: '#FFF1F2', text: '#BE123C' },
+};
+
+const SAMPLE_QUERIES = [
+  {
+    id: '1',
+    studentName: 'Riya Sharma',
+    title: 'Unable to access exam portal',
+    category: 'Technical',
+    priority: 'High',
+    status: 'Open',
+    createdAt: Date.now() - 3600000,
+  },
+  {
+    id: '2',
+    studentName: 'Arjun Mehta',
+    title: 'Request for fee receipt copy',
+    category: 'Admin',
+    priority: 'Medium',
+    status: 'In Progress',
+    createdAt: Date.now() - 86400000,
+  },
+  {
+    id: '3',
+    studentName: 'Priya Desai',
+    title: 'Doubt in Data Structures assignment',
+    category: 'Academic',
+    priority: 'Low',
+    status: 'Resolved',
+    createdAt: Date.now() - 172800000,
+  },
+];
+
+/** @param {{ status: string, onClick: Function }} props */
+function StatusBadge({ status, onClick }) {
+  const colorMap = {
+    'Open': COLORS.statusOpen,
+    'In Progress': COLORS.statusInProgress,
+    'Resolved': COLORS.statusResolved,
+  };
+  const colors = colorMap[status] || COLORS.statusOpen;
+
+  const style = {
+    borderRadius: 999,
+    padding: '2px 10px',
+    fontSize: 12,
+    fontWeight: 600,
+    background: colors.bg,
+    color: colors.text,
+    cursor: onClick ? 'pointer' : 'default',
+    border: 'none',
+    display: 'inline-block',
+    transition: 'opacity 0.15s',
+  };
+
+  const handleClick = () => { if (onClick) onClick(); };
+  const handleMouseEnter = (e) => { if (onClick) e.target.style.opacity = '0.75'; };
+  const handleMouseLeave = (e) => { e.target.style.opacity = '1'; };
+
+  return (
+    <span
+      style={style}
+      onClick={handleClick}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      title={onClick ? 'Click to cycle status' : undefined}
+    >
+      {status}
+    </span>
+  );
+}
+
+/** @param {{ priority: string }} props */
+function PriorityBadge({ priority }) {
+  const colorMap = {
+    'High': COLORS.priorityHigh,
+    'Medium': COLORS.priorityMedium,
+    'Low': COLORS.priorityLow,
+  };
+  const colors = colorMap[priority] || COLORS.priorityMedium;
+
+  const style = {
+    borderRadius: 999,
+    padding: '2px 10px',
+    fontSize: 12,
+    fontWeight: 600,
+    background: colors.bg,
+    color: colors.text,
+    display: 'inline-block',
+  };
+
+  return <span style={style}>{priority}</span>;
+}
+
+/** @param {{ category: string }} props */
+function CategoryBadge({ category }) {
+  const colorMap = {
+    'Academic': COLORS.categoryAcademic,
+    'Admin': COLORS.categoryAdmin,
+    'Technical': COLORS.categoryTechnical,
+  };
+  const colors = colorMap[category] || COLORS.categoryAdmin;
+
+  const style = {
+    borderRadius: 999,
+    padding: '2px 10px',
+    fontSize: 12,
+    fontWeight: 600,
+    background: colors.bg,
+    color: colors.text,
+    display: 'inline-block',
+  };
+
+  return <span style={style}>{category}</span>;
+}
+
+/** @param {{ query: Object, onStatusCycle: Function, onDelete: Function }} props */
+function QueryCard({ query, onStatusCycle, onDelete }) {
+  const [hovered, setHovered] = useState(false);
+
+  const formattedDate = new Intl.DateTimeFormat('en-IN', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  }).format(new Date(query.createdAt));
+
+  const cardStyle = {
+    background: COLORS.surface,
+    borderRadius: 12,
+    boxShadow: hovered
+      ? '0 4px 12px rgba(0,0,0,0.12)'
+      : '0 1px 3px rgba(0,0,0,0.08)',
+    padding: 20,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    transition: 'box-shadow 0.2s',
+  };
+
+  const handleMouseEnter = () => setHovered(true);
+  const handleMouseLeave = () => setHovered(false);
+  const handleDelete = () => onDelete(query.id);
+  const handleStatusCycle = () => onStatusCycle(query.id);
+
+  return (
+    <div style={cardStyle} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontWeight: 700, fontSize: 16, color: COLORS.text }}>{query.studentName}</span>
+        <button
+          onClick={handleDelete}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: '#EF4444', fontSize: 18, lineHeight: 1, padding: '2px 6px',
+            borderRadius: 4,
+          }}
+          title="Delete query"
+        >
+          🗑
+        </button>
+      </div>
+
+      <div style={{ fontSize: 14, color: COLORS.text }}>{query.title}</div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+        <CategoryBadge category={query.category} />
+        <PriorityBadge priority={query.priority} />
+        <StatusBadge status={query.status} onClick={handleStatusCycle} />
+      </div>
+
+      <div style={{ fontSize: 12, color: COLORS.muted }}>Submitted: {formattedDate}</div>
+
+    </div>
+  );
+}
+
+/** @param {{ onAdd: Function }} props */
+function AddQueryForm({ onAdd }) {
+  const [studentName, setStudentName] = useState('');
+  const [queryTitle, setQueryTitle] = useState('');
+  const [category, setCategory] = useState('Academic');
+  const [priority, setPriority] = useState('Medium');
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isDisabled = !studentName.trim() || !queryTitle.trim();
+
+  const handleSubmit = () => {
+    if (isDisabled) return;
+    onAdd({
+      id: Date.now().toString(),
+      studentName: studentName.trim(),
+      title: queryTitle.trim(),
+      category,
+      priority,
+      status: 'Open',
+      createdAt: Date.now(),
+    });
+    setStudentName('');
+    setQueryTitle('');
+    setCategory('Academic');
+    setPriority('Medium');
+  };
+
+  const inputStyle = {
+    border: `1.5px solid ${COLORS.border}`,
+    borderRadius: 8,
+    padding: '10px 12px',
+    fontSize: 14,
+    color: COLORS.text,
+    background: COLORS.surface,
+    outline: 'none',
+    width: '100%',
+    transition: 'border-color 0.15s',
+  };
+
+  const handleNameFocus = (e) => { e.target.style.borderColor = COLORS.primary; };
+  const handleNameBlur = (e) => { e.target.style.borderColor = COLORS.border; };
+  const handleTitleFocus = (e) => { e.target.style.borderColor = COLORS.primary; };
+  const handleTitleBlur = (e) => { e.target.style.borderColor = COLORS.border; };
+  const handleCatFocus = (e) => { e.target.style.borderColor = COLORS.primary; };
+  const handleCatBlur = (e) => { e.target.style.borderColor = COLORS.border; };
+  const handlePriFocus = (e) => { e.target.style.borderColor = COLORS.primary; };
+  const handlePriBlur = (e) => { e.target.style.borderColor = COLORS.border; };
+
+  const handleNameChange = (e) => setStudentName(e.target.value);
+  const handleTitleChange = (e) => setQueryTitle(e.target.value);
+  const handleCategoryChange = (e) => setCategory(e.target.value);
+  const handlePriorityChange = (e) => setPriority(e.target.value);
+
+  return (
+    <div style={{
+      background: COLORS.surface,
+      borderRadius: 12,
+      boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+      padding: 20,
+      marginBottom: 20,
+    }}>
+      <h3 style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, marginBottom: 16 }}>Add New Query</h3>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+        gap: 12,
+        marginBottom: 12,
+      }}>
+        <input
+          type="text"
+          placeholder="Student Name"
+          value={studentName}
+          onChange={handleNameChange}
+          onFocus={handleNameFocus}
+          onBlur={handleNameBlur}
+          style={inputStyle}
+        />
+        <input
+          type="text"
+          placeholder="Query Title"
+          value={queryTitle}
+          onChange={handleTitleChange}
+          onFocus={handleTitleFocus}
+          onBlur={handleTitleBlur}
+          style={inputStyle}
+        />
+        <select
+          value={category}
+          onChange={handleCategoryChange}
+          onFocus={handleCatFocus}
+          onBlur={handleCatBlur}
+          style={inputStyle}
+        >
+          <option>Academic</option>
+          <option>Admin</option>
+          <option>Technical</option>
+        </select>
+        <select
+          value={priority}
+          onChange={handlePriorityChange}
+          onFocus={handlePriFocus}
+          onBlur={handlePriBlur}
+          style={inputStyle}
+        >
+          <option>High</option>
+          <option>Medium</option>
+          <option>Low</option>
+        </select>
+      </div>
+
+      <button
+        onClick={handleSubmit}
+        disabled={isDisabled}
+        style={{
+          background: isDisabled ? '#94A3B8' : COLORS.primary,
+          color: '#fff',
+          border: 'none',
+          borderRadius: 8,
+          padding: '10px 24px',
+          fontSize: 14,
+          fontWeight: 700,
+          cursor: isDisabled ? 'not-allowed' : 'pointer',
+          opacity: isDisabled ? 0.6 : 1,
+          transition: 'background 0.15s',
+          width: isMobile ? '100%' : 'auto',
+        }}
+      >
+        + Add Query
+      </button>
+    </div>
+  );
+}
+
+/** @param {{ searchValue: string, onSearch: Function, statusFilter: string, onStatusFilter: Function, queryCount: Object }} props */
+function FilterBar({ searchValue, onSearch, statusFilter, onStatusFilter, queryCount }) {
+  const handleSearchChange = (e) => onSearch(e.target.value);
+  const handleStatusChange = (e) => onStatusFilter(e.target.value);
+
+  const statChipStyle = (color) => ({
+    borderRadius: 999,
+    padding: '3px 12px',
+    fontSize: 12,
+    fontWeight: 600,
+    background: color.bg,
+    color: color.text,
+    display: 'inline-block',
+  });
+
+  return (
+    <div style={{
+      background: COLORS.surface,
+      borderRadius: 12,
+      boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+      padding: 20,
+      marginBottom: 20,
+    }}>
+      <input
+        type="text"
+        placeholder="Search by name or title..."
+        value={searchValue}
+        onChange={handleSearchChange}
+        style={{
+          width: '100%',
+          border: `1.5px solid ${COLORS.border}`,
+          borderRadius: 8,
+          padding: '10px 12px',
+          fontSize: 14,
+          color: COLORS.text,
+          background: COLORS.background,
+          outline: 'none',
+          marginBottom: 12,
+        }}
+      />
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+        <select
+          value={statusFilter}
+          onChange={handleStatusChange}
+          style={{
+            border: `1.5px solid ${COLORS.border}`,
+            borderRadius: 8,
+            padding: '8px 12px',
+            fontSize: 13,
+            color: COLORS.text,
+            background: COLORS.surface,
+            outline: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          <option>All</option>
+          <option>Open</option>
+          <option>In Progress</option>
+          <option>Resolved</option>
+        </select>
+
+        <span style={statChipStyle(COLORS.statusOpen)}>Open: {queryCount.open}</span>
+        <span style={statChipStyle(COLORS.statusInProgress)}>In Progress: {queryCount.inProgress}</span>
+        <span style={statChipStyle(COLORS.statusResolved)}>Resolved: {queryCount.resolved}</span>
+        <span style={{ fontSize: 13, color: COLORS.muted, fontWeight: 600 }}>Total: {queryCount.total}</span>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [queries, setQueries] = useState(SAMPLE_QUERIES);
+  const [searchValue, setSearchValue] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
+
+  useEffect(() => {
+    const changed = queries.find(q => q._justUpdated);
+    if (changed) {
+      console.log('[Query Updated]', changed.id, changed.status);
+      setQueries(prev => prev.map(q => q.id === changed.id ? { ...q, _justUpdated: false } : q));
+    }
+  }, [queries]);
+
+  const filteredQueries = queries.filter((q) => {
+    const matchesSearch =
+      q.studentName.toLowerCase().includes(searchValue.toLowerCase()) ||
+      q.title.toLowerCase().includes(searchValue.toLowerCase());
+    const matchesStatus = statusFilter === 'All' || q.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const queryCount = {
+    total: queries.length,
+    open: queries.filter(q => q.status === 'Open').length,
+    inProgress: queries.filter(q => q.status === 'In Progress').length,
+    resolved: queries.filter(q => q.status === 'Resolved').length,
+  };
+
+  const handleAddQuery = (newQuery) => {
+    setQueries(prev => [...prev, newQuery]);
+  };
+
+  const handleDeleteQuery = (id) => {
+    setQueries(prev => prev.filter(q => q.id !== id));
+  };
+
+  const handleStatusCycle = (id) => {
+    const cycle = { 'Open': 'In Progress', 'In Progress': 'Resolved', 'Resolved': 'Open' };
+    setQueries(prev => prev.map(q =>
+      q.id === id ? { ...q, status: cycle[q.status], _justUpdated: true } : q
+    ));
+  };
+
+  const handleSearch = (value) => {
+    setSearchValue(value);
+  };
+
+  const handleStatusFilter = (value) => {
+    setStatusFilter(value);
+  };
+
+  const getEmptyMessage = () => {
+    if (searchValue) return 'Try a different search term.';
+    if (statusFilter !== 'All') return `No ${statusFilter.toLowerCase()} queries.`;
+    return 'Add your first query using the form above.';
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', background: COLORS.background, padding: '24px 16px' }}>
+      <div style={{ maxWidth: 960, margin: '0 auto' }}>
+
+        {/* Header */}
+        <div style={{ marginBottom: 32, textAlign: 'center' }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 48, height: 48, borderRadius: 12,
+            background: COLORS.primary, color: '#fff', fontSize: 20, marginBottom: 16,
+          }}>
+            📋
+          </div>
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: COLORS.text, letterSpacing: '-0.5px', marginBottom: 8 }}>
+            Student Query Tracker
+          </h1>
+          <p style={{ fontSize: 15, color: COLORS.muted }}>
+            Log, track, and resolve student queries
+          </p>
+        </div>
+
+        <FilterBar
+          searchValue={searchValue}
+          onSearch={handleSearch}
+          statusFilter={statusFilter}
+          onStatusFilter={handleStatusFilter}
+          queryCount={queryCount}
+        />
+
+        <AddQueryForm onAdd={handleAddQuery} />
+
+        {/* Query Grid */}
+        {filteredQueries.length > 0 ? (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+            gap: 16,
+          }}>
+            {filteredQueries.map(query => (
+              <QueryCard
+                key={query.id}
+                query={query}
+                onStatusCycle={handleStatusCycle}
+                onDelete={handleDeleteQuery}
+              />
+            ))}
+          </div>
+        ) : (
+          <div style={{
+            textAlign: 'center', padding: 48, color: COLORS.muted,
+            background: COLORS.surface, borderRadius: 12,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+          }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: COLORS.text, marginBottom: 6 }}>No queries found</div>
+            <div style={{ fontSize: 14 }}>{getEmptyMessage()}</div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <p style={{ textAlign: 'center', marginTop: 40, fontSize: 13, color: COLORS.muted }}>
+          Built by{' '}
+          <a href="https://github.com/Kalpesh8777" target="_blank" rel="noopener noreferrer"
+            style={{ color: COLORS.primary, textDecoration: 'none', fontWeight: 600 }}>
+            Kalpesh Mahajan
+          </a>
+          {' '}· React.js
+        </p>
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
